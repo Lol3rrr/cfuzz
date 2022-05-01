@@ -1,0 +1,20 @@
+<script lang="ts">
+    import { onMount } from "svelte";
+
+    import { loadRunning } from "../api";
+
+    let running: Array<String> = [];
+
+    onMount(() => {
+        loadRunning().then((data) => {
+            running = data;
+        });
+    });
+</script>
+
+<div>
+    <h2>Running</h2>
+    {#each running as runner}
+        <p>{runner}</p>
+    {/each}
+</div>

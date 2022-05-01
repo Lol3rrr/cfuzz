@@ -2,16 +2,37 @@ use std::fmt::Debug;
 
 use tokio::sync::{mpsc, oneshot};
 
-use crate::FuzzResult;
+use crate::{
+    project::{Project, RunTarget, Source, Target},
+    FuzzResult,
+};
 
 enum StorageRequest {
-    Store(FuzzResult),
-    LoadResults,
+    StoreResult {
+        project_name: String,
+        result: FuzzResult,
+    },
+    LoadResults {
+        project: String,
+    },
+    StoreProject(Project),
+    RemoveProject {
+        name: String,
+    },
+    LoadProjects,
+    AddProjectTarget {
+        project_name: String,
+        target: Target,
+    },
 }
 
 enum StorageResult {
     Store,
     LoadResults(Vec<FuzzResult>),
+    StoreProject,
+    RemoveProject,
+    LoadProjects(Vec<Project>),
+    AddProjectTarget,
 }
 
 pub struct StorageHandle {
@@ -34,27 +55,28 @@ fn storage_handler(
             None => return,
         };
 
-        match req {
-            StorageRequest::Store(data) => {
+        let res = match req {
+            StorageRequest::StoreResult {
+                project_name,
+                result,
+            } => {
                 connection
                     .execute(
-                        "INSERT INTO results (name, input) VALUES (:name, :data)",
-                        rusqlite::params![data.name, data.content],
+                        "INSERT INTO results (pname, tname, input) VALUES (:pname, :tname, :data)",
+                        rusqlite::named_params![":pname": project_name, ":tname": result.name, ":data": result.content],
                     )
                     .unwrap();
 
-                if res_channel.send(StorageResult::Store).is_err() {
-                    println!("Sending Result");
-                }
+                StorageResult::Store
             }
-            StorageRequest::LoadResults => {
+            StorageRequest::LoadResults { project } => {
                 let mut preped = connection
-                    .prepare("SELECT name, input FROM results")
+                    .prepare("SELECT tname, input FROM results WHERE pname=:pname")
                     .unwrap();
 
                 let results = preped
-                    .query_map([], |row| {
-                        let name: String = row.get("name")?;
+                    .query_map(rusqlite::named_params! { ":pname": project }, |row| {
+                        let name: String = row.get("tname")?;
                         let input: Vec<u8> = row.get("input")?;
 
                         Ok(FuzzResult {
@@ -65,14 +87,105 @@ fn storage_handler(
                     .unwrap()
                     .filter_map(|r| r.ok());
 
-                if res_channel
-                    .send(StorageResult::LoadResults(results.collect()))
-                    .is_err()
-                {
-                    println!("Sending Result");
-                }
+                StorageResult::LoadResults(results.collect())
+            }
+            StorageRequest::StoreProject(project) => {
+                let src_str = serde_json::to_string(&project.source).unwrap();
+                connection
+                    .execute(
+                        "INSERT OR REPLACE INTO projects (name, source) VALUES (:name, :source)",
+                        rusqlite::named_params![":name": project.name, ":source": src_str],
+                    )
+                    .unwrap();
+
+                StorageResult::StoreProject
+            }
+            StorageRequest::RemoveProject { name } => {
+                connection
+                    .execute(
+                        "DELETE FROM projects WHERE name=:pname",
+                        rusqlite::named_params! {":pname": name},
+                    )
+                    .unwrap();
+
+                connection
+                    .execute(
+                        "DELETE FROM results WHERE pname=:pname",
+                        rusqlite::named_params! {":pname": name},
+                    )
+                    .unwrap();
+
+                connection
+                    .execute(
+                        "DELETE FROM targets WHERE pname=:pname",
+                        rusqlite::named_params! {":pname": name},
+                    )
+                    .unwrap();
+
+                StorageResult::RemoveProject
+            }
+            StorageRequest::LoadProjects => {
+                let mut preped = connection
+                    .prepare("SELECT name, source FROM projects")
+                    .unwrap();
+
+                let mut preped_targets = connection
+                    .prepare("SELECT name, folder, target FROM targets WHERE pname=:pname")
+                    .unwrap();
+
+                let results = preped
+                    .query_map([], |row| {
+                        let name: String = row.get("name")?;
+                        let raw_source: String = row.get("source")?;
+
+                        let source: Source = serde_json::from_str(&raw_source).unwrap();
+
+                        let targets = preped_targets
+                            .query_map(rusqlite::named_params! { ":pname": name }, |row| {
+                                let t_name: String = row.get("name")?;
+                                let t_folder: String = row.get("folder")?;
+                                let raw_t_target: String = row.get("target")?;
+
+                                let t_target: RunTarget =
+                                    serde_json::from_str(&raw_t_target).unwrap();
+
+                                Ok(Target {
+                                    name: t_name,
+                                    folder: t_folder,
+                                    target: t_target,
+                                })
+                            })
+                            .unwrap()
+                            .filter_map(|r| r.ok())
+                            .collect();
+
+                        Ok(Project {
+                            name,
+                            source,
+                            targets,
+                        })
+                    })
+                    .unwrap()
+                    .filter_map(|r| r.ok());
+
+                StorageResult::LoadProjects(results.collect())
+            }
+            StorageRequest::AddProjectTarget {
+                project_name,
+                target,
+            } => {
+                let target_str = serde_json::to_string(&target.target).unwrap();
+                connection.execute(
+                    "INSERT OR REPLACE INTO targets (pname, name, folder, target) VALUES (:pname, :target_name, :target_folder, :target_target)", 
+                    rusqlite::named_params! { ":pname": project_name, ":target_name": target.name, ":target_folder": target.folder, ":target_target": target_str }).unwrap();
+
+                StorageResult::AddProjectTarget
             }
         };
+
+        if res_channel.send(res).is_err() {
+            println!("Sending Result");
+        }
     }
 }
 
@@ -81,10 +194,17 @@ pub fn start() -> StorageHandle {
 
     connection
         .execute(
-            "CREATE TABLE if not exists results (name string, input binary)",
+            "CREATE TABLE if not exists results (pname string, tname string, input binary)",
             [],
         )
         .expect("");
+    connection
+        .execute(
+            "CREATE TABLE if not exists projects (name string primary key, source string)",
+            [],
+        )
+        .expect("");
+    connection.execute("CREATE TABLE if not exists targets (pname string, name string, folder string, target string, PRIMARY KEY (pname, name))", []).expect("");
 
     let (coms, recv) = mpsc::channel::<(StorageRequest, oneshot::Sender<StorageResult>)>(64);
 
@@ -102,13 +222,65 @@ impl StorageHandle {
         recv.await.ok()
     }
 
-    pub async fn store_result(&self, data: FuzzResult) {
-        self.request(StorageRequest::Store(data)).await.unwrap();
+    pub async fn store_result(&self, project: String, data: FuzzResult) {
+        self.request(StorageRequest::StoreResult {
+            project_name: project,
+            result: data,
+        })
+        .await
+        .unwrap();
     }
 
-    pub async fn load_results(&self) -> Vec<FuzzResult> {
-        match self.request(StorageRequest::LoadResults).await.unwrap() {
+    pub async fn load_results(&self, project: String) -> Vec<FuzzResult> {
+        match self
+            .request(StorageRequest::LoadResults { project })
+            .await
+            .unwrap()
+        {
             StorageResult::LoadResults(r) => r,
+            _ => unreachable!(),
+        }
+    }
+
+    pub async fn update_project(&self, project: Project) {
+        match self
+            .request(StorageRequest::StoreProject(project))
+            .await
+            .unwrap()
+        {
+            StorageResult::StoreProject => {}
+            _ => unreachable!(),
+        };
+    }
+
+    pub async fn remove_project(&self, name: String) {
+        match self
+            .request(StorageRequest::RemoveProject { name })
+            .await
+            .unwrap()
+        {
+            StorageResult::RemoveProject => {}
+            _ => unreachable!(),
+        };
+    }
+
+    pub async fn load_projects(&self) -> Vec<Project> {
+        match self.request(StorageRequest::LoadProjects).await.unwrap() {
+            StorageResult::LoadProjects(r) => r,
+            _ => unreachable!(),
+        }
+    }
+
+    pub async fn add_project_target(&self, pname: String, target: Target) {
+        match self
+            .request(StorageRequest::AddProjectTarget {
+                project_name: pname,
+                target,
+            })
+            .await
+            .unwrap()
+        {
+            StorageResult::AddProjectTarget => {}
             _ => unreachable!(),
         }
     }

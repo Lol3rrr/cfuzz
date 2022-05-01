@@ -1,16 +1,15 @@
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Mutex,
-};
+use std::{collections::HashSet, sync::Mutex};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::{oneshot, OnceCell};
+use tokio::sync::OnceCell;
 
 mod target;
 pub use target::{FuzzTarget, RunableTarget};
 
 mod config;
 pub use config::{Runner, TargetConfig};
+
+pub mod project;
 
 pub mod storage;
 
@@ -30,6 +29,7 @@ pub struct FuzzResult {
 
 #[derive(Debug, Deserialize)]
 pub struct RunRequest {
+    pub pname: String,
     pub name: String,
     runner: Runner,
     config: TargetConfig,
@@ -38,6 +38,7 @@ pub struct RunRequest {
 }
 
 pub async fn run(req: RunRequest) {
+    let pname = req.pname.clone();
     let name = req.name.clone();
     dbg!(&req);
 
@@ -45,6 +46,7 @@ pub async fn run(req: RunRequest) {
         let (res_sender, res_recv) = tokio::sync::oneshot::channel();
 
         let running_req = RunRequest {
+            pname: req.pname.clone(),
             name: req.name.clone(),
             runner: req.runner.clone(),
             config: req.config.clone(),
@@ -78,10 +80,13 @@ pub async fn run(req: RunRequest) {
                 for res in r {
                     state
                         .store
-                        .store_result(FuzzResult {
-                            name: name.clone(),
-                            content: res,
-                        })
+                        .store_result(
+                            pname.clone(),
+                            FuzzResult {
+                                name: name.clone(),
+                                content: res,
+                            },
+                        )
                         .await;
                 }
             }

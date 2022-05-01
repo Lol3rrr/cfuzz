@@ -1,101 +1,77 @@
-use std::{
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{collections::HashSet, sync::Mutex};
 
-#[derive(Debug, Clone)]
-pub enum Runner {
-    CargoFuzz { target: String },
-}
+use serde::{Deserialize, Serialize};
+use tokio::sync::OnceCell;
+
+mod target;
+pub use target::{FuzzTarget, RunableTarget};
+
+mod config;
+pub use config::{Runner, TargetConfig};
+
+pub mod storage;
 
 #[derive(Debug)]
-pub enum TargetConfig {
-    Git { repo: String, folder: String },
+pub struct State {
+    pub running: Mutex<HashSet<String>>,
+    pub store: storage::StorageHandle,
 }
 
-pub struct FuzzTarget {
+pub static STATE: OnceCell<State> = OnceCell::const_new();
+
+#[derive(Debug, Serialize)]
+pub struct FuzzResult {
     name: String,
+    content: Vec<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RunRequest {
+    pub name: String,
     runner: Runner,
     config: TargetConfig,
 }
 
-impl FuzzTarget {
-    pub fn new<N>(name: N, runner: Runner, config: TargetConfig) -> Self
-    where
-        N: Into<String>,
-    {
-        Self {
-            name: name.into(),
-            runner,
-            config,
-        }
-    }
+pub async fn run(req: RunRequest) {
+    let name = req.name.clone();
+    let (res_sender, res_recv) = tokio::sync::oneshot::channel();
 
-    pub fn setup(&self) -> Option<RunableTarget> {
-        let base_path = Path::new("./fuzzing");
-        let target_path = base_path.join(&self.name);
-        std::fs::create_dir_all(&target_path).unwrap();
+    std::thread::spawn(move || {
+        let target = FuzzTarget::new(req.name, req.runner, req.config);
+        let runnable = target.setup().unwrap();
 
-        match &self.config {
-            TargetConfig::Git { repo, folder } => {
-                let target_path_str = target_path.to_str().unwrap();
-                let clone_output = Command::new("git")
-                    .args(["clone", repo, target_path_str])
-                    .output()
-                    .unwrap();
+        match runnable.run() {
+            Some(r) => {
+                res_sender.send(r).unwrap();
+            }
+            None => {
+                todo!()
+            }
+        };
+    });
 
-                assert!(clone_output.status.success());
+    match res_recv.await {
+        Ok(r) => {
+            let state = STATE.get().unwrap();
 
-                Some(RunableTarget {
-                    folder: target_path.join(&folder),
-                    runner: self.runner.clone(),
-                    cleanup: Box::new(move || {
-                        std::fs::remove_dir_all(target_path).unwrap();
-                    }),
-                })
+            for res in r {
+                state
+                    .store
+                    .store_result(FuzzResult {
+                        name: name.clone(),
+                        content: res,
+                    })
+                    .await;
             }
         }
-    }
-}
-
-pub struct RunableTarget {
-    folder: PathBuf,
-    runner: Runner,
-    cleanup: Box<dyn FnOnce() + Send>,
-}
-
-impl RunableTarget {
-    pub fn run(self) -> Option<Vec<Vec<u8>>> {
-        match self.runner {
-            Runner::CargoFuzz { target } => {
-                let artifacts_path = self.folder.join("fuzz").join("artifacts").join(&target);
-
-                let output = Command::new("cargo")
-                    .current_dir(&self.folder)
-                    .args(["fuzz", "run", &target])
-                    .output();
-
-                match output {
-                    Ok(_) => {
-                        let file_iter = std::fs::read_dir(artifacts_path)
-                            .unwrap()
-                            .filter_map(|e| e.ok())
-                            .filter(|entry| entry.file_type().unwrap().is_file())
-                            .map(|entry| {
-                                let e_path = entry.path();
-                                std::fs::read(e_path).unwrap()
-                            });
-
-                        (self.cleanup)();
-
-                        Some(file_iter.collect())
-                    }
-                    Err(err) => {
-                        dbg!(err);
-                        todo!()
-                    }
-                }
-            }
+        Err(e) => {
+            dbg!(e);
+            todo!()
         }
-    }
+    };
+
+    let state = STATE.get().unwrap();
+    let mut running = state.running.try_lock().unwrap();
+
+    running.remove(&name);
 }

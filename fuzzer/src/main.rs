@@ -1,11 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 use cfuzz::{
     project::{Project, Target},
-    run, storage, FuzzResult, RunRequest, State, STATE,
+    run, runner, storage, FuzzResult, RunRequest, State, STATE,
 };
 use serde::Deserialize;
 use warp::Filter;
@@ -18,6 +18,8 @@ struct CancelQuery {
 #[tokio::main]
 async fn main() {
     let storage_handle = cfuzz::storage::start(storage::sqlite::SqliteBackend::new("./data.db"));
+
+    let runner = Arc::new(runner::process::ProcessRunner::new("./fuzzing"));
 
     STATE
         .set(State {
@@ -52,8 +54,8 @@ async fn main() {
     let start_filter = warp::path!("api" / "run")
         .and(warp::post())
         .and(warp::body::json())
-        .map(|content: RunRequest| {
-            tokio::spawn(run(content));
+        .map(move |content: RunRequest| {
+            tokio::spawn(run(content, runner.clone()));
 
             ""
         });
@@ -131,7 +133,7 @@ async fn main() {
         .or(add_project_target)
         .with(
             warp::cors()
-                .allow_origins(["http://192.168.178.22:5000"])
+                .allow_origins(["http://192.168.178.22:5000", "http://localhost:51325"])
                 .allow_methods(["GET", "POST", "FETCH"])
                 .allow_credentials(true)
                 .allow_headers(["content-type", "content-length"]),

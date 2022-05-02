@@ -1,4 +1,7 @@
-use std::{collections::HashSet, sync::Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
@@ -11,6 +14,7 @@ pub use config::{Runner, TargetConfig};
 
 pub mod project;
 
+pub mod runner;
 pub mod storage;
 
 #[derive(Debug)]
@@ -37,7 +41,10 @@ pub struct RunRequest {
     repeating: bool,
 }
 
-pub async fn run(req: RunRequest) {
+pub async fn run<R>(req: RunRequest, runner: Arc<R>)
+where
+    R: runner::Runner + Send + Sync + 'static,
+{
     let pname = req.pname.clone();
     let name = req.name.clone();
     dbg!(&req);
@@ -53,25 +60,29 @@ pub async fn run(req: RunRequest) {
             repeating: req.repeating,
         };
 
-        let target = FuzzTarget::new(running_req.name, running_req.runner, running_req.config);
-        let runnable = target.setup().unwrap();
+        let target = FuzzTarget::new(
+            running_req.pname,
+            running_req.name,
+            running_req.runner,
+            running_req.config,
+        );
+        let runner = runner.clone();
+        std::thread::spawn(move || {
+            match runner.run(target) {
+                Some(r) => {
+                    res_sender.send(r).unwrap();
+                }
+                None => {
+                    println!("Error running Target")
+                }
+            };
+        });
 
         {
             let state = STATE.get().unwrap();
             let mut running = state.running.try_lock().unwrap();
             running.insert(name.clone());
         }
-
-        std::thread::spawn(move || {
-            match runnable.run() {
-                Some(r) => {
-                    res_sender.send(r).unwrap();
-                }
-                None => {
-                    println!("Error running Runnable");
-                }
-            };
-        });
 
         match res_recv.await {
             Ok(r) => {

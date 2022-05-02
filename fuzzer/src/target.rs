@@ -6,21 +6,37 @@ use std::{
 use crate::{Runner, TargetConfig};
 
 pub struct FuzzTarget {
+    pname: String,
     name: String,
     runner: Runner,
     config: TargetConfig,
 }
 
 impl FuzzTarget {
-    pub fn new<N>(name: N, runner: Runner, config: TargetConfig) -> Self
+    pub fn new<PN, N>(pname: PN, name: N, runner: Runner, config: TargetConfig) -> Self
     where
+        PN: Into<String>,
         N: Into<String>,
     {
         Self {
+            pname: pname.into(),
             name: name.into(),
             runner,
             config,
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn project_name(&self) -> &str {
+        &self.pname
+    }
+    pub fn config(&self) -> &TargetConfig {
+        &self.config
+    }
+    pub fn runner(&self) -> &Runner {
+        &self.runner
     }
 
     pub fn setup(&self) -> Option<RunableTarget> {

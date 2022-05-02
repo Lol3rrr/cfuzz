@@ -6,6 +6,8 @@ use crate::FuzzTarget;
 
 pub mod process;
 
+/// A Runner is responsible for actually running Fuzzing Targets, this allows different deployments to
+/// use different ways of running their Targets.
 pub trait Runner {
     /// Runs the given Target
     ///
@@ -13,6 +15,8 @@ pub trait Runner {
     fn run(&self, target: FuzzTarget, cancel: oneshot::Receiver<()>) -> Option<Vec<Vec<u8>>>;
 }
 
+/// A simple wrapper that allows you to run the given FuzzTarget with the provided Runner
+/// and waits until the Runner has finished
 pub async fn run_completion<R>(runner: Arc<R>, target: FuzzTarget) -> Option<Vec<Vec<u8>>>
 where
     R: Runner + Send + Sync + 'static,
@@ -39,6 +43,8 @@ where
     res
 }
 
+/// A simple helper function for running the FuzzTarget with the provided runner and either
+/// waiting for the runner to finish or until the timeout has elapsed
 pub async fn run_timeout<R>(
     runner: Arc<R>,
     target: FuzzTarget,

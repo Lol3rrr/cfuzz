@@ -9,29 +9,48 @@ use crate::{
 
 pub mod sqlite;
 
+/// A Storage-Backend that can be used to store all the Data generated and configured by the Program.
+///
+/// Having this abstraction allows for a wider variety of possible storage Solutions to fulfill different
+/// Goals, like in memory for testing or sqlite for a simple deployment.
 pub trait StorageBackend {
+    /// This should run the StorageBackend meaning that it will receive Storage Requests over the given mpsc-Queue
+    /// and should process them one by one and then send the Result back using the provided oneshot channel alongside
+    /// each Request.
+    ///
+    /// This should not block and instead perform only the setup that needs to be done before being able to potentially
+    /// serve requests and then move all the long running tasks (like handling the requests) to a background task/thread
     fn run(self, recv: mpsc::Receiver<(StorageRequest, oneshot::Sender<StorageResult>)>);
 }
 
+/// A Request for the Storage Backend
 pub enum StorageRequest {
+    /// The given result should be stored for the given Project
     StoreResult {
+        /// The Project to which this result belongs
         project_name: String,
+        /// The Result itself
         result: FuzzResult,
     },
+    /// Should load the Results for the given Project
     LoadResults {
+        /// The Project name
         project: String,
     },
+    /// Should store/update the Project Configuration
     StoreProject(Project),
-    RemoveProject {
-        name: String,
-    },
+    /// Should remove the Project
+    RemoveProject { name: String },
+    /// Should load all configured Projects
     LoadProjects,
+    /// Add a new Target to a Project
     AddProjectTarget {
         project_name: String,
         target: Target,
     },
 }
 
+/// A Result returned by the Storage Backend for a Request
 pub enum StorageResult {
     Store,
     LoadResults(Vec<FuzzResult>),
@@ -41,7 +60,9 @@ pub enum StorageResult {
     AddProjectTarget,
 }
 
+/// The Handle allows for easy interaction with a Storage Backend
 pub struct StorageHandle {
+    /// The Queue used for communicating with the Backend
     coms: mpsc::Sender<(StorageRequest, oneshot::Sender<StorageResult>)>,
 }
 

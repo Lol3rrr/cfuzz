@@ -1,8 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use tokio::sync::oneshot;
 
-use crate::{config, FuzzTarget, TargetConfig};
+use crate::{project::RunTarget, FuzzTarget, Source};
 
 use super::Runner;
 
@@ -20,16 +20,11 @@ impl ProcessRunner {
         }
     }
 
-    fn setup(
-        &self,
-        pname: &str,
-        name: &str,
-        source: &TargetConfig,
-    ) -> (PathBuf, Box<dyn FnOnce()>) {
+    fn setup(&self, pname: &str, name: &str, source: &Source) -> (PathBuf, Box<dyn FnOnce()>) {
         let project_path = self.subfolder.join(pname);
 
         match source {
-            TargetConfig::Git { repo, folder } => {
+            Source::Git { repo } => {
                 let repo_path = project_path.join(name);
                 let repo_path_str = repo_path.to_str().unwrap();
 
@@ -43,31 +38,31 @@ impl ProcessRunner {
                 // TODO
                 let _ = result;
 
-                let run_path = repo_path.join(folder);
+                let cleanup_path = repo_path.clone();
                 let cleanup = move || {
-                    std::fs::remove_dir_all(repo_path).unwrap();
+                    std::fs::remove_dir_all(cleanup_path).unwrap();
                 };
 
-                (run_path, Box::new(cleanup))
+                (repo_path, Box::new(cleanup))
             }
         }
     }
 
     fn run(
         &self,
-        project_path: &Path,
-        config: &config::Runner,
+        project_path: PathBuf,
+        config: &RunTarget,
         mut cancel: oneshot::Receiver<()>,
     ) -> Option<Vec<Vec<u8>>> {
         match config {
-            config::Runner::CargoFuzz { target } => {
-                let artifacts_path = project_path.join("fuzz").join("artifacts").join(target);
+            RunTarget::CargoFuzz { name } => {
+                let artifacts_path = project_path.join("fuzz").join("artifacts").join(name);
 
                 let output = std::process::Command::new("cargo")
                     .current_dir(project_path)
                     .arg("fuzz")
                     .arg("run")
-                    .arg(target)
+                    .arg(name)
                     .stdout(std::process::Stdio::null())
                     .stderr(std::process::Stdio::null())
                     .spawn();
@@ -121,9 +116,13 @@ impl ProcessRunner {
 
 impl Runner for ProcessRunner {
     fn run(&self, target: FuzzTarget, cancel: oneshot::Receiver<()>) -> Option<Vec<Vec<u8>>> {
-        let (run_dir, cleanup) = self.setup(target.project_name(), target.name(), target.config());
+        let (repo_dir, cleanup) = self.setup(target.project_name(), target.name(), target.config());
 
-        let result = self.run(&run_dir, target.runner(), cancel);
+        let result = self.run(
+            repo_dir.join(&target.runner().folder),
+            &target.runner().target,
+            cancel,
+        );
 
         cleanup();
 

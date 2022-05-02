@@ -3,14 +3,12 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use project::{Source, Target};
 use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 
 mod target;
-pub use target::{FuzzTarget, RunableTarget};
-
-mod config;
-pub use config::{Runner, TargetConfig};
+pub use target::FuzzTarget;
 
 pub mod project;
 
@@ -35,8 +33,8 @@ pub struct FuzzResult {
 pub struct RunRequest {
     pub pname: String,
     pub name: String,
-    runner: Runner,
-    config: TargetConfig,
+    runner: Target,
+    config: Source,
     #[serde(default)]
     repeating: bool,
 }

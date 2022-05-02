@@ -9,7 +9,9 @@ use crate::{
 
 use super::{StorageBackend, StorageRequest, StorageResult};
 
+/// A simple SQL-Lite Backend
 pub struct SqliteBackend {
+    /// The SQL-Lite Connection
     connection: Connection,
 }
 

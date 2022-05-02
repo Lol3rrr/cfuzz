@@ -3,13 +3,16 @@ use serde::{Deserialize, Serialize};
 /// A single Project which could contain multiple Targets
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Project {
+    /// The Name of the Project
     pub name: String,
+    /// The Source of the Projects Code
     pub source: Source,
+    /// The Fuzzing Targets of the Project
     pub targets: Vec<Target>,
 }
 
 /// A single Source for a Project
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum Source {
     /// A Git Repository as Source for the Project
     Git {
@@ -19,7 +22,7 @@ pub enum Source {
 }
 
 /// A single Fuzzing Target for a Project
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Target {
     /// The Name of the Target
     pub name: String,
@@ -30,7 +33,7 @@ pub struct Target {
 }
 
 /// A single runnable Fuzzing Target that specifies how the Target should be fuzzed
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum RunTarget {
     /// The Cargo-Fuzz
     CargoFuzz {

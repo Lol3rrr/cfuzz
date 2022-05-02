@@ -1,6 +1,6 @@
 import type { FuzzResult } from "./results";
 
-const base = "http://192.168.178.22:8080/api"
+const base = "http://192.168.178.22:8080/api";
 
 export class Project {
     name: String;

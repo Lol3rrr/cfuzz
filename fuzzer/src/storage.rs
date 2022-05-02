@@ -3,11 +3,17 @@ use std::fmt::Debug;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
-    project::{Project, RunTarget, Source, Target},
+    project::{Project, Target},
     FuzzResult,
 };
 
-enum StorageRequest {
+pub mod sqlite;
+
+pub trait StorageBackend {
+    fn run(self, recv: mpsc::Receiver<(StorageRequest, oneshot::Sender<StorageResult>)>);
+}
+
+pub enum StorageRequest {
     StoreResult {
         project_name: String,
         result: FuzzResult,
@@ -26,7 +32,7 @@ enum StorageRequest {
     },
 }
 
-enum StorageResult {
+pub enum StorageResult {
     Store,
     LoadResults(Vec<FuzzResult>),
     StoreProject,
@@ -45,170 +51,13 @@ impl Debug for StorageHandle {
     }
 }
 
-fn storage_handler(
-    connection: rusqlite::Connection,
-    mut recv: mpsc::Receiver<(StorageRequest, oneshot::Sender<StorageResult>)>,
-) {
-    loop {
-        let (req, res_channel) = match recv.blocking_recv() {
-            Some(d) => d,
-            None => return,
-        };
-
-        let res = match req {
-            StorageRequest::StoreResult {
-                project_name,
-                result,
-            } => {
-                connection
-                    .execute(
-                        "INSERT INTO results (pname, tname, input) VALUES (:pname, :tname, :data)",
-                        rusqlite::named_params![":pname": project_name, ":tname": result.name, ":data": result.content],
-                    )
-                    .unwrap();
-
-                StorageResult::Store
-            }
-            StorageRequest::LoadResults { project } => {
-                let mut preped = connection
-                    .prepare("SELECT tname, input FROM results WHERE pname=:pname")
-                    .unwrap();
-
-                let results = preped
-                    .query_map(rusqlite::named_params! { ":pname": project }, |row| {
-                        let name: String = row.get("tname")?;
-                        let input: Vec<u8> = row.get("input")?;
-
-                        Ok(FuzzResult {
-                            name,
-                            content: input,
-                        })
-                    })
-                    .unwrap()
-                    .filter_map(|r| r.ok());
-
-                StorageResult::LoadResults(results.collect())
-            }
-            StorageRequest::StoreProject(project) => {
-                let src_str = serde_json::to_string(&project.source).unwrap();
-                connection
-                    .execute(
-                        "INSERT OR REPLACE INTO projects (name, source) VALUES (:name, :source)",
-                        rusqlite::named_params![":name": project.name, ":source": src_str],
-                    )
-                    .unwrap();
-
-                StorageResult::StoreProject
-            }
-            StorageRequest::RemoveProject { name } => {
-                connection
-                    .execute(
-                        "DELETE FROM projects WHERE name=:pname",
-                        rusqlite::named_params! {":pname": name},
-                    )
-                    .unwrap();
-
-                connection
-                    .execute(
-                        "DELETE FROM results WHERE pname=:pname",
-                        rusqlite::named_params! {":pname": name},
-                    )
-                    .unwrap();
-
-                connection
-                    .execute(
-                        "DELETE FROM targets WHERE pname=:pname",
-                        rusqlite::named_params! {":pname": name},
-                    )
-                    .unwrap();
-
-                StorageResult::RemoveProject
-            }
-            StorageRequest::LoadProjects => {
-                let mut preped = connection
-                    .prepare("SELECT name, source FROM projects")
-                    .unwrap();
-
-                let mut preped_targets = connection
-                    .prepare("SELECT name, folder, target FROM targets WHERE pname=:pname")
-                    .unwrap();
-
-                let results = preped
-                    .query_map([], |row| {
-                        let name: String = row.get("name")?;
-                        let raw_source: String = row.get("source")?;
-
-                        let source: Source = serde_json::from_str(&raw_source).unwrap();
-
-                        let targets = preped_targets
-                            .query_map(rusqlite::named_params! { ":pname": name }, |row| {
-                                let t_name: String = row.get("name")?;
-                                let t_folder: String = row.get("folder")?;
-                                let raw_t_target: String = row.get("target")?;
-
-                                let t_target: RunTarget =
-                                    serde_json::from_str(&raw_t_target).unwrap();
-
-                                Ok(Target {
-                                    name: t_name,
-                                    folder: t_folder,
-                                    target: t_target,
-                                })
-                            })
-                            .unwrap()
-                            .filter_map(|r| r.ok())
-                            .collect();
-
-                        Ok(Project {
-                            name,
-                            source,
-                            targets,
-                        })
-                    })
-                    .unwrap()
-                    .filter_map(|r| r.ok());
-
-                StorageResult::LoadProjects(results.collect())
-            }
-            StorageRequest::AddProjectTarget {
-                project_name,
-                target,
-            } => {
-                let target_str = serde_json::to_string(&target.target).unwrap();
-                connection.execute(
-                    "INSERT OR REPLACE INTO targets (pname, name, folder, target) VALUES (:pname, :target_name, :target_folder, :target_target)", 
-                    rusqlite::named_params! { ":pname": project_name, ":target_name": target.name, ":target_folder": target.folder, ":target_target": target_str }).unwrap();
-
-                StorageResult::AddProjectTarget
-            }
-        };
-
-        if res_channel.send(res).is_err() {
-            println!("Sending Result");
-        }
-    }
-}
-
-pub fn start() -> StorageHandle {
-    let connection = rusqlite::Connection::open("./data.db").expect("");
-
-    connection
-        .execute(
-            "CREATE TABLE if not exists results (pname string, tname string, input binary)",
-            [],
-        )
-        .expect("");
-    connection
-        .execute(
-            "CREATE TABLE if not exists projects (name string primary key, source string)",
-            [],
-        )
-        .expect("");
-    connection.execute("CREATE TABLE if not exists targets (pname string, name string, folder string, target string, PRIMARY KEY (pname, name))", []).expect("");
-
+pub fn start<S>(backend: S) -> StorageHandle
+where
+    S: StorageBackend,
+{
     let (coms, recv) = mpsc::channel::<(StorageRequest, oneshot::Sender<StorageResult>)>(64);
 
-    std::thread::spawn(move || storage_handler(connection, recv));
+    backend.run(recv);
 
     StorageHandle { coms }
 }

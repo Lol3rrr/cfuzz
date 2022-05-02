@@ -2,6 +2,13 @@
 	import Router from "svelte-spa-router";
 	import routes from "./routes";
 	import Navbar from "./components/Navbar.svelte";
+	import { onMount } from "svelte";
+
+	import * as store from "./store";
+
+	onMount(() => {
+		store.updateProjects();
+	});
 </script>
 
 <main>
@@ -16,7 +23,7 @@
 		text-align: center;
 
 		display: grid;
-		grid-template-columns: 15vw 85vw;
+		grid-template-columns: 20vw 80vw;
 		grid-template-rows: 99vh;
 	}
 

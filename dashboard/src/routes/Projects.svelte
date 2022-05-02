@@ -3,14 +3,15 @@
 	import Collapsable from "../components/Collapsable.svelte";
 
 	import * as api from "../api";
-	import { bind } from "svelte/internal";
+	import * as store from "../store";
 
 	let projects: Array<api.Project> = [];
+	store.projects.subscribe((data) => {
+		projects = data;
+	});
 
 	onMount(() => {
-		api.load_projects().then((data) => {
-			projects = data;
-		});
+		store.updateProjects();
 	});
 
 	let addProjectExpand = false;

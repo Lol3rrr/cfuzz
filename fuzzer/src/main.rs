@@ -5,7 +5,7 @@ use std::{
 
 use cfuzz::{
     project::{Project, Target},
-    run, FuzzResult, RunRequest, State, STATE,
+    run, storage, FuzzResult, RunRequest, State, STATE,
 };
 use serde::Deserialize;
 use warp::Filter;
@@ -17,7 +17,7 @@ struct CancelQuery {
 
 #[tokio::main]
 async fn main() {
-    let storage_handle = cfuzz::storage::start();
+    let storage_handle = cfuzz::storage::start(storage::sqlite::SqliteBackend::new("./data.db"));
 
     STATE
         .set(State {

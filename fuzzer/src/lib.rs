@@ -50,8 +50,6 @@ where
     dbg!(&req);
 
     loop {
-        let (res_sender, res_recv) = tokio::sync::oneshot::channel();
-
         let running_req = RunRequest {
             pname: req.pname.clone(),
             name: req.name.clone(),
@@ -67,16 +65,6 @@ where
             running_req.config,
         );
         let runner = runner.clone();
-        std::thread::spawn(move || {
-            match runner.run(target) {
-                Some(r) => {
-                    res_sender.send(r).unwrap();
-                }
-                None => {
-                    println!("Error running Target")
-                }
-            };
-        });
 
         {
             let state = STATE.get().unwrap();
@@ -84,8 +72,8 @@ where
             running.insert(name.clone());
         }
 
-        match res_recv.await {
-            Ok(r) => {
+        match crate::runner::run_completion(runner.clone(), target).await {
+            Some(r) => {
                 let state = STATE.get().unwrap();
 
                 for res in r {
@@ -101,9 +89,8 @@ where
                         .await;
                 }
             }
-            Err(e) => {
-                dbg!(e);
-                todo!()
+            None => {
+                println!("Target Failed");
             }
         };
 

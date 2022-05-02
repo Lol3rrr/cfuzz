@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use tokio::sync::oneshot;
+
 use crate::{config, FuzzTarget, TargetConfig};
 
 use super::Runner;
@@ -26,8 +28,6 @@ impl ProcessRunner {
     ) -> (PathBuf, Box<dyn FnOnce()>) {
         let project_path = self.subfolder.join(pname);
 
-        dbg!(name);
-
         match source {
             TargetConfig::Git { repo, folder } => {
                 let repo_path = project_path.join(name);
@@ -40,7 +40,8 @@ impl ProcessRunner {
                     .output()
                     .unwrap();
 
-                dbg!(result);
+                // TODO
+                let _ = result;
 
                 let run_path = repo_path.join(folder);
                 let cleanup = move || {
@@ -52,26 +53,49 @@ impl ProcessRunner {
         }
     }
 
-    fn run(&self, project_path: &Path, config: &config::Runner) -> Option<Vec<Vec<u8>>> {
+    fn run(
+        &self,
+        project_path: &Path,
+        config: &config::Runner,
+        mut cancel: oneshot::Receiver<()>,
+    ) -> Option<Vec<Vec<u8>>> {
         match config {
             config::Runner::CargoFuzz { target } => {
                 let artifacts_path = project_path.join("fuzz").join("artifacts").join(target);
-
-                dbg!(&project_path, &artifacts_path);
 
                 let output = std::process::Command::new("cargo")
                     .current_dir(project_path)
                     .arg("fuzz")
                     .arg("run")
                     .arg(target)
-                    .output();
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .spawn();
 
-                match output {
-                    Ok(_) => {}
+                let mut child = match output {
+                    Ok(c) => c,
                     Err(_) => {
                         todo!()
                     }
                 };
+
+                loop {
+                    // println!("Waiting for Child");
+
+                    // If the child is done, we exit
+                    if child.try_wait().unwrap().is_some() {
+                        println!("Child Done");
+                        break;
+                    }
+                    // If we received a signal to cancel the Run, we kill the Child and exit
+                    if cancel.try_recv().is_ok() {
+                        child.kill().unwrap();
+                        return None;
+                    }
+
+                    // Otherwise we wait a second before polling again
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
 
                 let entry_iter = std::fs::read_dir(artifacts_path)
                     .ok()?
@@ -96,10 +120,10 @@ impl ProcessRunner {
 }
 
 impl Runner for ProcessRunner {
-    fn run(&self, target: FuzzTarget) -> Option<Vec<Vec<u8>>> {
+    fn run(&self, target: FuzzTarget, cancel: oneshot::Receiver<()>) -> Option<Vec<Vec<u8>>> {
         let (run_dir, cleanup) = self.setup(target.project_name(), target.name(), target.config());
 
-        let result = self.run(&run_dir, target.runner());
+        let result = self.run(&run_dir, target.runner(), cancel);
 
         cleanup();
 

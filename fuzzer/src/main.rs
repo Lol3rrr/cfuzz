@@ -7,13 +7,7 @@ use cfuzz::{
     project::{Project, Target},
     run, runner, storage, FuzzResult, RunRequest, State, STATE,
 };
-use serde::Deserialize;
 use warp::Filter;
-
-#[derive(Debug, Deserialize)]
-struct CancelQuery {
-    name: String,
-}
 
 #[tokio::main]
 async fn main() {
@@ -58,15 +52,6 @@ async fn main() {
             tokio::spawn(run(content, runner.clone()));
 
             ""
-        });
-    let cancel_filter = warp::path!("api" / "cancel")
-        .and(warp::post())
-        .and(warp::query())
-        .map(|query: CancelQuery| {
-            // TODO
-            dbg!(&query);
-
-            "TODO"
         });
 
     let update_project_filter = warp::path!("api" / "projects" / "update")
@@ -126,14 +111,13 @@ async fn main() {
     let server = targets_filter
         .or(results_filter)
         .or(start_filter)
-        .or(cancel_filter)
         .or(update_project_filter)
         .or(remove_project_filter)
         .or(list_projects_filter)
         .or(add_project_target)
         .with(
             warp::cors()
-                .allow_origins(["http://192.168.178.22:5000", "http://localhost:51325"])
+                .allow_origins(["http://192.168.178.22:5000", "http://localhost:61263"])
                 .allow_methods(["GET", "POST", "FETCH"])
                 .allow_credentials(true)
                 .allow_headers(["content-type", "content-length"]),

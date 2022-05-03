@@ -108,6 +108,8 @@ async fn main() {
             ""
         });
 
+    let content = warp::get().and(warp::fs::dir("./assets/"));
+
     let server = targets_filter
         .or(results_filter)
         .or(start_filter)
@@ -115,12 +117,14 @@ async fn main() {
         .or(remove_project_filter)
         .or(list_projects_filter)
         .or(add_project_target)
+        .or(content)
         .with(
             warp::cors()
-                .allow_origins(["http://192.168.178.22:5000", "http://localhost:61263"])
+                .allow_origins(["http://192.168.178.22:5000", "http://192.168.178.22:5000/"])
                 .allow_methods(["GET", "POST", "FETCH"])
                 .allow_credentials(true)
-                .allow_headers(["content-type", "content-length"]),
+                .allow_headers(["content-type", "content-length"])
+                .build(),
         );
     warp::serve(server).run(([0, 0, 0, 0], 8080)).await;
 }

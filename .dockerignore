@@ -1,0 +1,4 @@
+fuzzer/target/*
+fuzzer/fuzzing/*
+dashboard/node_modules/*
+.git

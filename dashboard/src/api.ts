@@ -37,14 +37,17 @@ export async function run(project_name: String, name: String, fuzz_target: Strin
         "pname": project_name,
         "name": name,
         "runner": {
-            "CargoFuzz": {
-                "target": fuzz_target
+            "name": name,
+            "folder": folder,
+            "target": {
+                "CargoFuzz": {
+                    "name": fuzz_target
+                }
             }
         },
         "config": {
             "Git": {
-                "repo": repo,
-                "folder": folder
+                "repo": repo
             }
         },
         "repeating": false

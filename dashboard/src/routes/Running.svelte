@@ -15,6 +15,19 @@
 <div>
     <h2>Running</h2>
     {#each running as runner}
-        <p>{runner}</p>
+        <div class="running">
+            <h3>{runner}</h3>
+        </div>
     {/each}
 </div>
+
+<style>
+    .running {
+        background-color: #dddddd;
+        border-radius: 5px;
+
+        width: 60%;
+        margin: auto;
+        padding: 0.3rem;
+    }
+</style>

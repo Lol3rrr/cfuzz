@@ -43,10 +43,22 @@ pub enum StorageRequest {
     RemoveProject { name: String },
     /// Should load all configured Projects
     LoadProjects,
+    /// Should attempt to load the Project with the given Name
+    LoadProject {
+        /// The Name of the Project to load
+        name: String,
+    },
     /// Add a new Target to a Project
     AddProjectTarget {
         project_name: String,
         target: Target,
+    },
+    /// Should attempt to load the Target with the given Name from the Project
+    LoadTarget {
+        /// The Name of the Project that the target belongs to
+        project_name: String,
+        /// The Name of the Target itself
+        target_name: String,
     },
 }
 
@@ -57,7 +69,9 @@ pub enum StorageResult {
     StoreProject,
     RemoveProject,
     LoadProjects(Vec<Project>),
+    LoadProject(Option<Project>),
     AddProjectTarget,
+    LoadTarget(Option<Target>),
 }
 
 /// The Handle allows for easy interaction with a Storage Backend
@@ -137,6 +151,20 @@ impl StorageHandle {
     pub async fn load_projects(&self) -> Vec<Project> {
         match self.request(StorageRequest::LoadProjects).await.unwrap() {
             StorageResult::LoadProjects(r) => r,
+            _ => unreachable!(),
+        }
+    }
+
+    pub async fn load_project<N>(&self, name: N) -> Option<Project>
+    where
+        N: Into<String>,
+    {
+        match self
+            .request(StorageRequest::LoadProject { name: name.into() })
+            .await
+            .unwrap()
+        {
+            StorageResult::LoadProject(d) => d,
             _ => unreachable!(),
         }
     }

@@ -12,13 +12,7 @@
     }
 
     function runTarget() {
-        api.run(
-            project.name,
-            target.name,
-            target.target.CargoFuzz.name,
-            project.source.Git.repo,
-            target.folder
-        );
+        api.run(project.name, target.name);
     }
 </script>
 

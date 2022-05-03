@@ -48,10 +48,21 @@ async fn main() {
     let start_filter = warp::path!("api" / "run")
         .and(warp::post())
         .and(warp::body::json())
-        .map(move |content: RunRequest| {
-            tokio::spawn(run(content, runner.clone()));
+        .then(move |content: RunRequest| {
+            let runner = runner.clone();
+            async move {
+                let state = STATE.get().unwrap();
+                let project = state.store.load_project(&content.pname).await.unwrap();
+                let target = project
+                    .targets
+                    .iter()
+                    .find(|t| t.name == content.name)
+                    .unwrap();
 
-            ""
+                tokio::spawn(run(content, runner, target.clone(), project.source));
+
+                ""
+            }
         });
 
     let update_project_filter = warp::path!("api" / "projects" / "update")

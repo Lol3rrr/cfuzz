@@ -1,9 +1,10 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onDestroy, onMount } from "svelte";
     import ProjectTarget from "../components/ProjectTarget.svelte";
     import Collapsable from "../components/Collapsable.svelte";
     import Result from "../components/Result.svelte";
     import * as api from "../api";
+    import * as store from "../store";
     import type { FuzzResult } from "../results";
 
     export let params: {
@@ -22,7 +23,6 @@
                 project = projects.find(
                     (project) => project.name == params.name
                 );
-                console.log(project);
             })
             .then(() => {
                 api.loadResults(project.name).then((data) => {

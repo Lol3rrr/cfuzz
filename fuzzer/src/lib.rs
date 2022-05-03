@@ -33,34 +33,26 @@ pub struct FuzzResult {
 pub struct RunRequest {
     pub pname: String,
     pub name: String,
-    runner: Target,
-    config: Source,
-    #[serde(default)]
-    repeating: bool,
 }
 
-pub async fn run<R>(req: RunRequest, runner: Arc<R>)
+pub async fn run<R>(req: RunRequest, runner: Arc<R>, target: Target, source: Source)
 where
     R: runner::Runner + Send + Sync + 'static,
 {
     let pname = req.pname.clone();
     let name = req.name.clone();
-    dbg!(&req);
 
     loop {
         let running_req = RunRequest {
             pname: req.pname.clone(),
             name: req.name.clone(),
-            runner: req.runner.clone(),
-            config: req.config.clone(),
-            repeating: req.repeating,
         };
 
-        let target = FuzzTarget::new(
+        let ftarget = FuzzTarget::new(
             running_req.pname,
             running_req.name,
-            running_req.runner,
-            running_req.config,
+            target.clone(),
+            source.clone(),
         );
         let runner = runner.clone();
 
@@ -70,7 +62,7 @@ where
             running.insert(name.clone());
         }
 
-        match crate::runner::run_completion(runner.clone(), target).await {
+        match crate::runner::run_completion(runner.clone(), ftarget).await {
             Some(r) => {
                 let state = STATE.get().unwrap();
 
@@ -92,7 +84,7 @@ where
             }
         };
 
-        if !req.repeating {
+        if !target.repeating {
             break;
         }
     }

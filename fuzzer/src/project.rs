@@ -30,6 +30,8 @@ pub struct Target {
     pub folder: String,
     /// The actual Target to run
     pub target: RunTarget,
+    /// If the Target should be executed in a loop or only once
+    pub repeating: bool,
 }
 
 /// A single runnable Fuzzing Target that specifies how the Target should be fuzzed

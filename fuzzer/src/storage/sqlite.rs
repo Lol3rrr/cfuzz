@@ -1,3 +1,25 @@
+//! SQLite Storage Backend
+//!
+//! # Schemas
+//! ## `projects` Table
+//! Stores the configured Projects Data
+//! ### name: String (primary key)
+//! ### source: String
+//!
+//! ## `targets` Table
+//! Stores the Targets for the Projects
+//! ### pname: String
+//! ### name: String
+//! ### folder: String
+//! ### target: String
+//! ### Primary Key: (pname, name)
+//!
+//! ## `results` Table
+//! Stores the fuzzing Results for the Targets
+//! ### pname: String
+//! ### tname: String
+//! ### input: Binary
+
 use std::path::Path;
 
 use rusqlite::Connection;
@@ -127,6 +149,7 @@ impl SqliteBackend {
                                     name: t_name,
                                     folder: t_folder,
                                     target: t_target,
+                                    repeating: false,
                                 })
                             })
                             .unwrap()
@@ -144,6 +167,53 @@ impl SqliteBackend {
 
                 StorageResult::LoadProjects(results.collect())
             }
+            StorageRequest::LoadProject { name } => {
+                let mut preped_targets = self
+                    .connection
+                    .prepare("SELECT name, folder, target FROM targets WHERE pname=:pname")
+                    .unwrap();
+
+                let result = self.connection.query_row(
+                    "SELECT name, source FROM projects where name=:pname",
+                    rusqlite::named_params! {
+                        ":pname": name,
+                    },
+                    |row| {
+                        let name: String = row.get("name")?;
+                        let raw_source: String = row.get("source")?;
+
+                        let source: Source = serde_json::from_str(&raw_source).unwrap();
+
+                        let targets = preped_targets
+                            .query_map(rusqlite::named_params! { ":pname": name }, |row| {
+                                let t_name: String = row.get("name")?;
+                                let t_folder: String = row.get("folder")?;
+                                let raw_t_target: String = row.get("target")?;
+
+                                let t_target: RunTarget =
+                                    serde_json::from_str(&raw_t_target).unwrap();
+
+                                Ok(Target {
+                                    name: t_name,
+                                    folder: t_folder,
+                                    target: t_target,
+                                    repeating: false,
+                                })
+                            })
+                            .unwrap()
+                            .filter_map(|r| r.ok())
+                            .collect();
+
+                        Ok(Project {
+                            name,
+                            source,
+                            targets,
+                        })
+                    },
+                );
+
+                StorageResult::LoadProject(result.ok())
+            }
             StorageRequest::AddProjectTarget {
                 project_name,
                 target,
@@ -154,6 +224,14 @@ impl SqliteBackend {
                             rusqlite::named_params! { ":pname": project_name, ":target_name": target.name, ":target_folder": target.folder, ":target_target": target_str }).unwrap();
 
                 StorageResult::AddProjectTarget
+            }
+            StorageRequest::LoadTarget {
+                project_name,
+                target_name,
+            } => {
+                dbg!(&project_name, &target_name);
+
+                todo!("Load Target")
             }
         }
     }

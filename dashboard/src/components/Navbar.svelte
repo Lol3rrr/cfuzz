@@ -1,4 +1,6 @@
 <script lang="ts">
+    import { onMount } from "svelte";
+
     import type { Project } from "../api";
 
     import * as store from "../store";
@@ -6,14 +8,14 @@
     import Collapsable from "./Collapsable.svelte";
 
     let projects: Array<Project> = [];
+
     store.projects.subscribe((data) => {
         projects = data;
     });
 
-    let projectButton;
     let collapsed = true;
+    let projectButton;
     function expandProjects() {
-        console.log("Expand");
         collapsed = !collapsed;
 
         if (collapsed) {
@@ -50,7 +52,7 @@
         display: inline-block;
         width: 10rem;
         height: 99%;
-        background-color: grey;
+        background-color: #808080;
 
         display: flexbox;
     }
@@ -69,8 +71,11 @@
     }
 
     .subproject {
+        display: inline-block;
         font-size: 1.3em;
         margin-left: 1.5rem;
+
+        width: 100%;
     }
 
     button {

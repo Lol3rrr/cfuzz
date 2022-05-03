@@ -1,6 +1,6 @@
 import type { FuzzResult } from "./results";
 
-const base = "http://192.168.178.22:8080/api";
+const base = isProduction ? window.location.origin + "/api" : "http://192.168.178.22:8080/api";
 
 export class Project {
     name: String;
@@ -32,25 +32,10 @@ export async function loadRunning(): Promise<Array<String>> {
     return fetch(base + "/targets").then((response) => response.json());
 }
 
-export async function run(project_name: String, name: String, fuzz_target: String, repo: String, folder: String) {
+export async function run(project_name: String, name: String) {
     let config = {
         "pname": project_name,
         "name": name,
-        "runner": {
-            "name": name,
-            "folder": folder,
-            "target": {
-                "CargoFuzz": {
-                    "name": fuzz_target
-                }
-            }
-        },
-        "config": {
-            "Git": {
-                "repo": repo
-            }
-        },
-        "repeating": false
     };
 
     return fetch(base + "/run", {
@@ -100,7 +85,8 @@ export async function addProjectTarget(pname: String, tname: String, folder: Str
             "CargoFuzz": {
                 "name": fuzz_target
             }
-        }
+        },
+        "repeating": false,
     };
 
     fetch(base + "/projects/targets/add?pname=" + pname, {

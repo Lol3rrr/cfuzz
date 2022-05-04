@@ -2,6 +2,7 @@
     import { onDestroy, onMount } from "svelte";
     import ProjectTarget from "../components/ProjectTarget.svelte";
     import Collapsable from "../components/Collapsable.svelte";
+    import Popup from "../components/Popup.svelte";
     import Result from "../components/Result.svelte";
     import * as api from "../api";
     import * as store from "../store";
@@ -72,6 +73,12 @@
 
         <div>
             <button on:click={collapseAddTarget}>Add Target</button>
+
+            {#if collapsedAddTarget}
+                <Popup>
+                    <p>testing</p>
+                </Popup>
+            {/if}
 
             <Collapsable bind:collapsed={collapsedAddTarget}>
                 <div>

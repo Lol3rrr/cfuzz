@@ -60,6 +60,13 @@ pub enum StorageRequest {
         /// The Name of the Target itself
         target_name: String,
     },
+    /// Remove the Target matching the Project and Name
+    RemoveTarget {
+        /// The Name of the Project
+        project_name: String,
+        /// The Name of the Target
+        target_name: String,
+    },
 }
 
 /// A Result returned by the Storage Backend for a Request
@@ -72,6 +79,7 @@ pub enum StorageResult {
     LoadProject(Option<Project>),
     AddProjectTarget,
     LoadTarget(Option<Target>),
+    RemoveTarget,
 }
 
 /// The Handle allows for easy interaction with a Storage Backend
@@ -179,6 +187,19 @@ impl StorageHandle {
             .unwrap()
         {
             StorageResult::AddProjectTarget => {}
+            _ => unreachable!(),
+        }
+    }
+    pub async fn remove_project_target(&self, pname: String, target: String) {
+        match self
+            .request(StorageRequest::RemoveTarget {
+                project_name: pname,
+                target_name: target,
+            })
+            .await
+            .unwrap()
+        {
+            StorageResult::RemoveTarget => {}
             _ => unreachable!(),
         }
     }

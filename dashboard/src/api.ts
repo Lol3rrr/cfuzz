@@ -97,3 +97,9 @@ export async function addProjectTarget(pname: String, tname: String, folder: Str
         }
     });
 }
+
+export async function removeProjectTarget(pname: String, tname: String) {
+    fetch(base + "/projects/targets/remove?pname=" + pname + "&name=" + tname, {
+        method: "POST",
+    });
+}

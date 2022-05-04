@@ -233,6 +233,22 @@ impl SqliteBackend {
 
                 todo!("Load Target")
             }
+            StorageRequest::RemoveTarget {
+                project_name,
+                target_name,
+            } => {
+                self.connection
+                    .execute(
+                        "DELETE FROM targets WHERE pname=:pname AND name=:target_name",
+                        rusqlite::named_params! {
+                            ":pname": project_name,
+                            ":target_name": target_name,
+                        },
+                    )
+                    .unwrap();
+
+                StorageResult::RemoveTarget
+            }
         }
     }
 }

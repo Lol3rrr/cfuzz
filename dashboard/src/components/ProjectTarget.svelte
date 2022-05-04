@@ -14,6 +14,10 @@
     function runTarget() {
         api.run(project.name, target.name);
     }
+
+    function removeTarget() {
+        api.removeProjectTarget(project.name, target.name);
+    }
 </script>
 
 <div class="target">
@@ -28,6 +32,8 @@
     <Collapsable bind:collapsed>
         <p>Folder: {target.folder}</p>
         <p>Target: {target.target.CargoFuzz.name}</p>
+
+        <button on:click={removeTarget}>Remove</button>
     </Collapsable>
 </div>
 

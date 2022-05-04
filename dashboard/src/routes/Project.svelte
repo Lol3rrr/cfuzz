@@ -4,6 +4,7 @@
     import Collapsable from "../components/Collapsable.svelte";
     import Popup from "../components/Popup.svelte";
     import Result from "../components/Result.svelte";
+    import AddTarget from "../components/AddTarget.svelte";
     import * as api from "../api";
     import * as store from "../store";
     import type { FuzzResult } from "../results";
@@ -60,6 +61,11 @@
             addTargetTarget
         );
     }
+
+    function addedTarget() {
+        console.log("AAHHHH ADDED");
+        collapseAddTarget();
+    }
 </script>
 
 <div>
@@ -76,38 +82,15 @@
 
             {#if collapsedAddTarget}
                 <Popup>
-                    <p>testing</p>
+                    <div class="add_target_popup">
+                        <button on:click={collapseAddTarget}>X</button>
+                        <AddTarget
+                            on:added={addedTarget}
+                            bind:projectName={project.name}
+                        />
+                    </div>
                 </Popup>
             {/if}
-
-            <Collapsable bind:collapsed={collapsedAddTarget}>
-                <div>
-                    <form>
-                        <label for="target_name">Target-Name</label>
-                        <input
-                            type="text"
-                            name="target_name"
-                            id="target_name"
-                            bind:value={addTargetName}
-                        />
-                        <label for="target_folder">Target-Folder</label>
-                        <input
-                            type="text"
-                            name="target_folder"
-                            id="target_folder"
-                            bind:value={addTargetFolder}
-                        />
-                        <label for="target_target">Fuzz-Target</label>
-                        <input
-                            type="text"
-                            name="target_target"
-                            id="target_target"
-                            bind:value={addTargetTarget}
-                        />
-                        <button on:click={addTarget}>Add Target</button>
-                    </form>
-                </div>
-            </Collapsable>
         </div>
     </div>
 
@@ -123,3 +106,11 @@
         <button on:click={deleteProject}>Delete Project</button>
     </div>
 </div>
+
+<style>
+    .add_target_popup > button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+    }
+</style>

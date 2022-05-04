@@ -118,6 +118,27 @@ async fn main() {
 
             ""
         });
+    let remove_project_target = warp::path!("api" / "projects" / "targets" / "remove")
+        .and(warp::post())
+        .and(warp::query::<HashMap<String, String>>())
+        .then(|query: HashMap<String, String>| async move {
+            let project_name = match query.get("pname") {
+                Some(n) => n,
+                None => return "Missing pname",
+            };
+            let target_name = match query.get("name") {
+                Some(n) => n,
+                None => return "Missing name",
+            };
+
+            let state = STATE.get().unwrap();
+            state
+                .store
+                .remove_project_target(project_name.to_string(), target_name.to_string())
+                .await;
+
+            ""
+        });
 
     let content = warp::get().and(warp::fs::dir("./assets/"));
 
@@ -128,6 +149,7 @@ async fn main() {
         .or(remove_project_filter)
         .or(list_projects_filter)
         .or(add_project_target)
+        .or(remove_project_target)
         .or(content)
         .with(
             warp::cors()
